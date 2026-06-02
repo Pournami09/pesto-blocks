@@ -1,0 +1,371 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: #2c2c2b;
+  background: #f9f9f8;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 24px;
+  letter-spacing: -0.04em;
+}
+
+.pesto-ob-container {
+  max-width: 560px;
+  width: 100%;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 32px;
+  box-shadow: 0px 0px 0px 1px rgba(84,72,49,0.08),
+              0px 2px 4px -1px rgba(0,0,0,0.06),
+              0px 14px 28px -6px rgba(0,0,0,0.1);
+}
+
+.pesto-ob-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.pesto-ob-header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-top: 12px;
+  color: #2c2c2b;
+}
+
+.pesto-ob-subtitle {
+  font-size: 14px;
+  color: #73726e;
+  margin-top: 4px;
+}
+
+/* Progress dots */
+.pesto-ob-progress {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.pesto-ob-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d4d4d4;
+  transition: background 0.2s;
+}
+
+.pesto-ob-dot.active {
+  background: #538700;
+}
+
+.pesto-ob-dot.completed {
+  background: #a3c578;
+}
+
+/* Step content */
+.pesto-ob-step-content {
+  min-height: 200px;
+}
+
+.pesto-ob-step-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #2c2c2b;
+}
+
+.pesto-ob-step-body {
+  font-size: 14px;
+  line-height: 22px;
+  color: #73726e;
+}
+
+.pesto-ob-step-body p {
+  margin-bottom: 10px;
+}
+
+.pesto-ob-step-body ol, .pesto-ob-step-body ul {
+  margin-left: 20px;
+  margin-bottom: 12px;
+}
+
+.pesto-ob-step-body li {
+  margin-bottom: 6px;
+}
+
+.pesto-ob-step-body strong {
+  color: #2c2c2b;
+}
+
+.pesto-ob-step-body code {
+  background: #f5f5f4;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'SF Mono', monospace;
+  font-size: 13px;
+}
+
+.pesto-ob-step-body a {
+  color: #538700;
+  text-decoration: none;
+}
+
+.pesto-ob-step-body a:hover {
+  text-decoration: underline;
+}
+
+/* Form elements in steps */
+.pesto-ob-field {
+  margin-top: 12px;
+}
+
+.pesto-ob-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #7e7a76;
+  margin-bottom: 4px;
+}
+
+.pesto-ob-input {
+  width: 100%;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #2c2c2b;
+  outline: none;
+}
+
+.pesto-ob-input:focus {
+  border-color: #538700;
+  box-shadow: 0 0 0 2px rgba(83,135,0,0.15);
+}
+
+.pesto-ob-select {
+  width: 100%;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #2c2c2b;
+  outline: none;
+  background: #fff;
+}
+
+/* Radio group */
+.pesto-ob-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pesto-ob-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.pesto-ob-radio.selected {
+  border-color: #538700;
+  background: #fafff4;
+}
+
+.pesto-ob-radio input[type="radio"] {
+  margin-top: 3px;
+  accent-color: #538700;
+}
+
+.pesto-ob-radio-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2c2c2b;
+}
+
+.pesto-ob-radio-desc {
+  font-size: 12px;
+  color: #73726e;
+  margin-top: 2px;
+}
+
+/* Checkbox group for seeded sites */
+.pesto-ob-site-list {
+  margin-top: 10px;
+  padding: 8px 0;
+}
+
+.pesto-ob-site-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: #2c2c2b;
+}
+
+.pesto-ob-site-item input[type="checkbox"] {
+  accent-color: #538700;
+}
+
+/* Status */
+.pesto-ob-status {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.pesto-ob-status.success {
+  background: #ebf3dd;
+  color: #3a6000;
+}
+
+.pesto-ob-status.error {
+  background: #fde8e8;
+  color: #c53030;
+}
+
+.pesto-ob-status.info {
+  background: #f0f0ef;
+  color: #73726e;
+}
+
+/* Button in step */
+.pesto-ob-action {
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: #538700;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pesto-ob-action:hover {
+  background: #457100;
+}
+
+.pesto-ob-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pesto-ob-action.secondary {
+  background: transparent;
+  color: #73726e;
+  border: 1px solid #d4d4d4;
+}
+
+.pesto-ob-action.secondary:hover {
+  background: #f5f5f4;
+}
+
+/* Navigation */
+.pesto-ob-nav {
+  display: flex;
+  align-items: center;
+  margin-top: 24px;
+  gap: 8px;
+}
+
+.pesto-ob-spacer {
+  flex: 1;
+}
+
+.pesto-ob-back, .pesto-ob-next {
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+}
+
+.pesto-ob-back {
+  background: transparent;
+  color: #73726e;
+  border: 1px solid #d4d4d4;
+}
+
+.pesto-ob-back:hover {
+  background: #f5f5f4;
+}
+
+.pesto-ob-next {
+  background: #538700;
+  color: #ffffff;
+}
+
+.pesto-ob-next:hover {
+  background: #457100;
+}
+
+.pesto-ob-next:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Done page */
+.pesto-ob-done {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.pesto-ob-done h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #538700;
+}
+
+.pesto-ob-done p {
+  font-size: 14px;
+  color: #73726e;
+  margin-bottom: 6px;
+  line-height: 22px;
+}
+
+/* Tabs for Path A / Path B */
+.pesto-ob-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  margin-top: 12px;
+}
+
+.pesto-ob-tab {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #d4d4d4;
+  background: transparent;
+  color: #73726e;
+  font-family: inherit;
+}
+
+.pesto-ob-tab.active {
+  background: #538700;
+  color: #fff;
+  border-color: #538700;
+}
