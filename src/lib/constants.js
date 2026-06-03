@@ -22,6 +22,11 @@ export const MSG_LOCK = 'LOCK';
 export const MSG_GET_STATE = 'GET_STATE';
 export const MSG_ARM_TAB = 'ARM_TAB';
 export const MSG_REGISTER_SCRIPTS = 'REGISTER_SCRIPTS';
+export const MSG_PIN_RECENT = 'PIN_RECENT';
+export const MSG_UNPIN_RECENT = 'UNPIN_RECENT';
+export const MSG_DISMISS_RECENT = 'DISMISS_RECENT';
+export const MSG_SEARCH_DATABASES = 'SEARCH_DATABASES';
+export const MSG_SWITCH_DATABASE = 'SWITCH_DATABASE';
 
 // Storage keys
 export const STORAGE_TOKEN = 'pesto_token';
@@ -33,6 +38,8 @@ export const STORAGE_TRIGGER_MODE = 'pesto_trigger_mode';
 export const STORAGE_ALLOWLIST = 'pesto_allowlist';
 export const STORAGE_RECENTS = 'pesto_recents';
 export const STORAGE_ARMED_TABS = 'pesto_armed_tabs';
+export const STORAGE_PINNED = 'pesto_pinned';
+export const STORAGE_DB_PARENT = 'pesto_db_parent';
 
 // Trigger modes
 export const MODE_AUTO_ALL = 1;

@@ -4,6 +4,11 @@ import {
   MSG_GET_RECENTS, MSG_ADD_SITE, MSG_REMOVE_SITE,
   MSG_LOCK, MSG_ARM_TAB,
   MSG_DELETE_OPTION, MSG_ARCHIVE_ROW,
+  MSG_PIN_RECENT, MSG_UNPIN_RECENT, MSG_DISMISS_RECENT,
+  MSG_SEARCH_DATABASES, MSG_SWITCH_DATABASE,
+  STORAGE_TOKEN, STORAGE_DB_ID, STORAGE_DB_NAME,
+  STORAGE_TRIGGER_MODE, STORAGE_ALLOWLIST, STORAGE_RECENTS,
+  STORAGE_PINNED, STORAGE_DB_PARENT,
   MODE_AUTO_ALL, MODE_AUTO_ALLOWLIST, MODE_CLICK_TO_ARM,
   SEEDED_ALLOWLIST,
 } from '../lib/constants.js';
@@ -22,8 +27,37 @@ const LOGO_SVG = `<svg width="20" height="20" viewBox="0 0 51 51" fill="none"><r
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
+  root.classList.remove('ready');
   try {
-    const state = await chrome.runtime.sendMessage({ type: MSG_GET_STATE });
+    // Read directly from local storage — no Notion API calls, instant render
+    const data = await chrome.storage.local.get([
+      STORAGE_TOKEN, STORAGE_DB_ID, STORAGE_DB_NAME,
+      STORAGE_TRIGGER_MODE, STORAGE_ALLOWLIST, STORAGE_RECENTS,
+      STORAGE_PINNED, STORAGE_DB_PARENT,
+    ]);
+    const token = data[STORAGE_TOKEN];
+    const dbId = data[STORAGE_DB_ID];
+    const allPinned = data[STORAGE_PINNED] || {};
+    const dbPinned = dbId ? (allPinned[dbId] || []) : [];
+    const rawRecents = data[STORAGE_RECENTS] || [];
+
+    // Filter recents: exclude pinned items, cap at 3
+    const displayRecents = rawRecents
+      .filter((r) => !dbPinned.some((p) => p.question === r.question && p.option === r.option))
+      .slice(0, 3);
+
+    const state = {
+      connected: !!(token && dbId),
+      hasToken: !!token,
+      dbId: dbId || null,
+      dbName: data[STORAGE_DB_NAME] || null,
+      dbParent: data[STORAGE_DB_PARENT] || null,
+      triggerMode: data[STORAGE_TRIGGER_MODE] || MODE_AUTO_ALLOWLIST,
+      allowlist: data[STORAGE_ALLOWLIST] || [],
+      recents: displayRecents,
+      pinned: dbPinned,
+    };
+
     if (state.connected) {
       renderConnected(state);
     } else {
@@ -32,6 +66,7 @@ async function init() {
   } catch (err) {
     root.innerHTML = `<div class="pesto-status error">Failed to load: ${err.message}</div>`;
   }
+  requestAnimationFrame(() => root.classList.add('ready'));
 }
 
 // ---------------------------------------------------------------------------
@@ -203,10 +238,27 @@ function renderConnected(state) {
   header.innerHTML = `<div class="pesto-logo-small">${LOGO_SVG}</div><div class="pesto-header-title">Pesto</div>`;
   root.appendChild(header);
 
-  // Connection chip
-  const chip = el('div', 'pesto-connection-chip');
-  chip.innerHTML = `<div class="pesto-dot"></div>Connected to ${esc(state.dbName || 'database')}`;
-  root.appendChild(chip);
+  // DB selector with breadcrumb
+  const dbSelector = el('div', 'pesto-db-selector');
+
+  if (state.dbParent) {
+    const breadcrumb = el('div', 'pesto-breadcrumb');
+    breadcrumb.innerHTML = `<span class="pesto-breadcrumb-parent">${esc(state.dbParent)}</span><span class="pesto-breadcrumb-sep"> / </span><span class="pesto-breadcrumb-db">${esc(state.dbName || 'database')}</span>`;
+    dbSelector.appendChild(breadcrumb);
+  }
+
+  const selectorRow = el('div', 'pesto-db-selector-row');
+  selectorRow.innerHTML = `<div class="pesto-dot"></div>`;
+  const selectorText = el('span', 'pesto-db-selector-text');
+  selectorText.textContent = state.dbName || 'database';
+  selectorRow.appendChild(selectorText);
+  const chevron = el('span', 'pesto-db-chevron');
+  chevron.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
+  selectorRow.appendChild(chevron);
+  selectorRow.addEventListener('click', () => toggleDbDropdown(dbSelector, state));
+  dbSelector.appendChild(selectorRow);
+
+  root.appendChild(dbSelector);
 
   // Mode 3: Arm this tab button
   if (state.triggerMode === MODE_CLICK_TO_ARM) {
@@ -262,8 +314,8 @@ function renderConnected(state) {
 
   root.appendChild(el('div', 'pesto-divider'));
 
-  // Recents
-  renderRecents(state.recents);
+  // Pinned + Recents
+  renderPinnedAndRecents(state.pinned, state.recents);
 
   root.appendChild(el('div', 'pesto-divider'));
 
@@ -426,11 +478,113 @@ async function addSite(domainInput) {
   init();
 }
 
-function renderRecents(recents) {
+async function toggleDbDropdown(container, state) {
+  const existing = container.querySelector('.pesto-db-dropdown');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+
+  const dropdown = el('div', 'pesto-db-dropdown');
+  const loading = el('div', 'pesto-status info');
+  loading.textContent = 'Loading databases...';
+  dropdown.appendChild(loading);
+  container.appendChild(dropdown);
+
+  try {
+    const result = await chrome.runtime.sendMessage({ type: MSG_SEARCH_DATABASES });
+    const databases = result.databases || [];
+
+    dropdown.innerHTML = '';
+
+    if (databases.length === 0) {
+      const empty = el('div', 'pesto-status info');
+      empty.textContent = 'No Pesto databases found.';
+      dropdown.appendChild(empty);
+      return;
+    }
+
+    for (const db of databases) {
+      const option = el('div', 'pesto-db-option');
+      const normalizedNewId = db.id.replace(/-/g, '');
+      const normalizedCurrentId = (state.dbId || '').replace(/-/g, '');
+      if (normalizedNewId === normalizedCurrentId) {
+        option.classList.add('active');
+      }
+
+      const optBreadcrumb = el('div', 'pesto-db-option-breadcrumb');
+      optBreadcrumb.textContent = db.parentPageTitle;
+      option.appendChild(optBreadcrumb);
+
+      const optName = el('div', 'pesto-db-option-name');
+      optName.textContent = db.title;
+      option.appendChild(optName);
+
+      option.addEventListener('click', async () => {
+        if (normalizedNewId === normalizedCurrentId) {
+          dropdown.remove();
+          return;
+        }
+        optName.textContent = 'Switching...';
+        await chrome.runtime.sendMessage({ type: MSG_SWITCH_DATABASE, dbId: db.id });
+        init();
+      });
+
+      dropdown.appendChild(option);
+    }
+  } catch (err) {
+    dropdown.innerHTML = '';
+    const errMsg = el('div', 'pesto-status error');
+    errMsg.textContent = `Error: ${err.message}`;
+    dropdown.appendChild(errMsg);
+  }
+}
+
+function renderPinnedAndRecents(pinned, recents) {
   const section = el('div', 'pesto-section');
-  const label = el('div', 'pesto-section-label');
-  label.textContent = 'Recents';
-  section.appendChild(label);
+
+  // Pinned section
+  if (pinned && pinned.length > 0) {
+    const pinnedLabel = el('div', 'pesto-section-label');
+    pinnedLabel.textContent = 'Pinned';
+    section.appendChild(pinnedLabel);
+
+    for (const item of pinned) {
+      const row = el('div', 'pesto-row');
+
+      const text = el('span', 'pesto-row-text');
+      text.textContent = item.option;
+      text.title = `${item.question}: ${item.option}`;
+      row.appendChild(text);
+
+      const actions = el('div', 'pesto-row-actions');
+
+      actions.appendChild(createCopyButton(item.option));
+
+      // Unpin button
+      const unpinBtn = el('div', 'pesto-row-action');
+      unpinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2.2 6 6l-3 3 5.5 5.5"/><path d="m18 22-5.5-5.5L16 13l3.8-3.7"/><line x1="2" y1="22" x2="22" y2="2"/></svg>`;
+      unpinBtn.title = 'Unpin';
+      unpinBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await chrome.runtime.sendMessage({
+          type: MSG_UNPIN_RECENT,
+          question: item.question,
+          option: item.option,
+        });
+        init();
+      });
+      actions.appendChild(unpinBtn);
+
+      row.appendChild(actions);
+      section.appendChild(row);
+    }
+  }
+
+  // Recents section
+  const recentsLabel = el('div', 'pesto-section-label');
+  recentsLabel.textContent = 'Recents';
+  section.appendChild(recentsLabel);
 
   if (!recents || recents.length === 0) {
     const empty = el('div', 'pesto-row');
@@ -452,33 +606,37 @@ function renderRecents(recents) {
 
       const actions = el('div', 'pesto-row-actions');
 
-      // Copy button
-      const copyBtn = el('div', 'pesto-row-action');
-      copyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
-      copyBtn.title = 'Copy';
-      copyBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(recent.option);
-          copyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
-          setTimeout(() => {
-            copyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
-          }, 1000);
-        } catch { /* clipboard API may fail */ }
-      });
-      actions.appendChild(copyBtn);
+      actions.appendChild(createCopyButton(recent.option));
 
-      // Delete button
-      const deleteBtn = el('div', 'pesto-row-action trash');
-      deleteBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
-      deleteBtn.title = 'Delete';
-      deleteBtn.addEventListener('click', (e) => {
+      // Pin button
+      const pinBtn = el('div', 'pesto-row-action');
+      pinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1.5 4.5H10.5z"/><path d="M10.5 6.5 8 13h8l-2.5-6.5"/></svg>`;
+      pinBtn.title = 'Pin';
+      pinBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        // For recents, we just remove from local list (not from Notion)
-        // A full implementation would match to the Notion row and delete
+        await chrome.runtime.sendMessage({
+          type: MSG_PIN_RECENT,
+          question: recent.question,
+          option: recent.option,
+        });
+        init();
+      });
+      actions.appendChild(pinBtn);
+
+      // Dismiss button (×) — removes from recents only, not from Notion
+      const dismissBtn = el('div', 'pesto-row-action');
+      dismissBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+      dismissBtn.title = 'Dismiss';
+      dismissBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await chrome.runtime.sendMessage({
+          type: MSG_DISMISS_RECENT,
+          question: recent.question,
+          option: recent.option,
+        });
         row.remove();
       });
-      actions.appendChild(deleteBtn);
+      actions.appendChild(dismissBtn);
 
       row.appendChild(actions);
       section.appendChild(row);
@@ -486,6 +644,24 @@ function renderRecents(recents) {
   }
 
   root.appendChild(section);
+}
+
+function createCopyButton(textToCopy) {
+  const COPY_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+  const CHECK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+
+  const btn = el('div', 'pesto-row-action');
+  btn.innerHTML = COPY_SVG;
+  btn.title = 'Copy';
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      btn.innerHTML = CHECK_SVG;
+      setTimeout(() => { btn.innerHTML = COPY_SVG; }, 1000);
+    } catch { /* clipboard API may fail */ }
+  });
+  return btn;
 }
 
 function renderSettings() {

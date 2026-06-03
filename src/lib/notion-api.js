@@ -208,6 +208,60 @@ export async function searchPages(token) {
 }
 
 /**
+ * Search for databases the connection can access that have the Pesto schema
+ * (Question title + Answer rich_text). Returns [{ id, title, parentPageTitle }].
+ */
+export async function searchDatabases(token) {
+  const data = await notionFetch(token, '/search', {
+    method: 'POST',
+    body: {
+      filter: { property: 'object', value: 'database' },
+      page_size: 100,
+    },
+  });
+
+  const databases = [];
+  for (const db of data.results) {
+    if (db.in_trash) continue;
+
+    const titleParts = db.title || [];
+    const title = titleParts.map((rt) => rt.plain_text).join('') || 'Untitled';
+
+    // Validate schema: must have Question (title) and Answer (rich_text)
+    const props = db.properties || {};
+    let hasQuestion = false;
+    let hasAnswer = false;
+    for (const [name, prop] of Object.entries(props)) {
+      if (name === 'Question' && prop.type === 'title') hasQuestion = true;
+      if (name === 'Answer' && prop.type === 'rich_text') hasAnswer = true;
+    }
+    if (!hasQuestion || !hasAnswer) continue;
+
+    // Fetch parent page title for breadcrumb
+    let parentPageTitle = null;
+    if (db.parent?.type === 'page_id') {
+      try {
+        const parentPage = await notionFetch(token, `/pages/${db.parent.page_id}`, { method: 'GET' });
+        for (const prop of Object.values(parentPage.properties || {})) {
+          if (prop.type === 'title' && prop.title?.length) {
+            parentPageTitle = prop.title.map((rt) => rt.plain_text).join('');
+            break;
+          }
+        }
+      } catch { /* parent page might not be accessible */ }
+    }
+
+    databases.push({
+      id: db.id,
+      title,
+      parentPageTitle: parentPageTitle || 'Unknown page',
+    });
+  }
+
+  return databases;
+}
+
+/**
  * Test connection by querying the database with a 1-page limit and validating schema.
  * Returns { valid, dbName, rowCount, error }.
  */

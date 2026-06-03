@@ -5,8 +5,11 @@ import {
   MSG_SEARCH_PAGES, MSG_SET_TRIGGER_MODE, MSG_GET_RECENTS,
   MSG_ADD_SITE, MSG_REMOVE_SITE, MSG_REFRESH_CACHE, MSG_CLEAR_CACHE,
   MSG_LOCK, MSG_GET_STATE, MSG_ARM_TAB, MSG_REGISTER_SCRIPTS,
+  MSG_PIN_RECENT, MSG_UNPIN_RECENT, MSG_DISMISS_RECENT,
+  MSG_SEARCH_DATABASES, MSG_SWITCH_DATABASE,
   STORAGE_TOKEN, STORAGE_DB_ID, STORAGE_DB_NAME,
   STORAGE_TRIGGER_MODE, STORAGE_ALLOWLIST, STORAGE_RECENTS, STORAGE_ARMED_TABS,
+  STORAGE_PINNED, STORAGE_DB_PARENT,
   MODE_AUTO_ALL, MODE_AUTO_ALLOWLIST, MODE_CLICK_TO_ARM,
   MERGE_THRESHOLD, ANSWER_CHAR_LIMIT, MAX_RECENTS,
   ALARM_CACHE_TTL,
@@ -15,6 +18,7 @@ import {
 import {
   queryAllRows, createPage, updatePageAnswer, archivePage,
   createDatabase as notionCreateDatabase, searchPages as notionSearchPages,
+  searchDatabases as notionSearchDatabases,
   testConnection as notionTestConnection, extractDbId,
 } from './lib/notion-api.js';
 
@@ -201,6 +205,59 @@ async function addRecent(questionCanonical, optionText) {
 }
 
 // ---------------------------------------------------------------------------
+// Pin helpers
+// ---------------------------------------------------------------------------
+
+async function getAllPinned() {
+  const { [STORAGE_PINNED]: pinned = {} } = await chrome.storage.local.get(STORAGE_PINNED);
+  return pinned;
+}
+
+async function getPinnedForDb(dbId) {
+  const allPinned = await getAllPinned();
+  return allPinned[dbId] || [];
+}
+
+function isPinned(item, pinnedList) {
+  return pinnedList.some(
+    (p) => p.question === item.question && p.option === item.option
+  );
+}
+
+function getDisplayRecents(recents, pinnedList) {
+  return recents
+    .filter((r) => !isPinned(r, pinnedList))
+    .slice(0, 3);
+}
+
+async function validatePinned(pinned, token, dbId) {
+  try {
+    const rows = await queryAllRows(token, dbId);
+    const index = buildIndex(rows);
+    await setCachedData(index);
+
+    const validated = pinned.filter((r) => {
+      const match = index.find((entry) =>
+        normalizeLabel(entry.canonical) === normalizeLabel(r.question) ||
+        entry.normalizedAliases.includes(normalizeLabel(r.question))
+      );
+      if (!match) return false;
+      return match.options.some((opt) => opt.trim() === r.option.trim());
+    });
+
+    if (validated.length !== pinned.length) {
+      const allPinned = await getAllPinned();
+      allPinned[dbId] = validated;
+      await chrome.storage.local.set({ [STORAGE_PINNED]: allPinned });
+    }
+
+    return validated;
+  } catch {
+    return pinned;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Message handler
 // ---------------------------------------------------------------------------
 
@@ -375,9 +432,18 @@ async function handleMessage(message, sender) {
       const db = await notionCreateDatabase(token, message.parentPageId);
       const dbName = db.title?.map((rt) => rt.plain_text).join('') || 'Pesto Answers';
 
+      // Look up parent page title for breadcrumb
+      let dbParent = null;
+      try {
+        const pages = await notionSearchPages(token);
+        const parentPage = pages.find((p) => p.id.replace(/-/g, '') === message.parentPageId.replace(/-/g, ''));
+        if (parentPage) dbParent = parentPage.title;
+      } catch { /* ignore */ }
+
       await chrome.storage.local.set({
         [STORAGE_DB_ID]: db.id,
         [STORAGE_DB_NAME]: dbName,
+        [STORAGE_DB_PARENT]: dbParent,
       });
       // Clear recents and cache — fresh database has no history
       await chrome.storage.local.remove([STORAGE_RECENTS]);
@@ -404,10 +470,77 @@ async function handleMessage(message, sender) {
       const { [STORAGE_RECENTS]: recents = [] } = await chrome.storage.local.get(STORAGE_RECENTS);
       const { token, dbId } = await getCredentials();
 
-      if (!token || !dbId) return { recents: [] };
+      if (!token || !dbId) return { recents: [], pinned: [] };
 
       const validated = await validateRecents(recents, token, dbId);
-      return { recents: validated };
+      const pinned = await getPinnedForDb(dbId);
+      const validatedPinned = await validatePinned(pinned, token, dbId);
+      const displayRecents = getDisplayRecents(validated, validatedPinned);
+
+      return { recents: displayRecents, pinned: validatedPinned };
+    }
+
+    case MSG_PIN_RECENT: {
+      const { question, option } = message;
+      const { dbId } = await requireCredentials();
+      const allPinned = await getAllPinned();
+      const dbPinned = allPinned[dbId] || [];
+
+      if (!isPinned({ question, option }, dbPinned)) {
+        dbPinned.push({ question, option, timestamp: Date.now() });
+        allPinned[dbId] = dbPinned;
+        await chrome.storage.local.set({ [STORAGE_PINNED]: allPinned });
+      }
+      return { ok: true };
+    }
+
+    case MSG_UNPIN_RECENT: {
+      const { question, option } = message;
+      const { dbId } = await requireCredentials();
+      const allPinned = await getAllPinned();
+      const dbPinned = allPinned[dbId] || [];
+
+      allPinned[dbId] = dbPinned.filter(
+        (p) => !(p.question === question && p.option === option)
+      );
+      await chrome.storage.local.set({ [STORAGE_PINNED]: allPinned });
+      return { ok: true };
+    }
+
+    case MSG_DISMISS_RECENT: {
+      const { question, option } = message;
+      const { [STORAGE_RECENTS]: recents = [] } = await chrome.storage.local.get(STORAGE_RECENTS);
+      const updated = recents.filter(
+        (r) => !(r.question === question && r.option === option)
+      );
+      await chrome.storage.local.set({ [STORAGE_RECENTS]: updated });
+      return { ok: true };
+    }
+
+    case MSG_SEARCH_DATABASES: {
+      const { [STORAGE_TOKEN]: token } = await chrome.storage.local.get(STORAGE_TOKEN);
+      if (!token) throw new Error('Set your token first.');
+      const databases = await notionSearchDatabases(token);
+      return { databases };
+    }
+
+    case MSG_SWITCH_DATABASE: {
+      const { dbId: newDbId } = message;
+      const { [STORAGE_TOKEN]: token } = await chrome.storage.local.get(STORAGE_TOKEN);
+      if (!token) throw new Error('Set your token first.');
+
+      const result = await notionTestConnection(token, newDbId);
+      if (!result.valid) return result;
+
+      await chrome.storage.local.set({
+        [STORAGE_DB_ID]: newDbId,
+        [STORAGE_DB_NAME]: result.dbName,
+      });
+      // Clear recents and cache; pinned items are per-DB and persist
+      await chrome.storage.local.remove([STORAGE_RECENTS]);
+      await clearCacheData();
+
+      return { ok: true, dbName: result.dbName };
     }
 
     case MSG_ADD_SITE: {
@@ -468,6 +601,7 @@ async function handleMessage(message, sender) {
     case MSG_LOCK: {
       await chrome.storage.local.remove([
         STORAGE_TOKEN, STORAGE_DB_ID, STORAGE_DB_NAME, STORAGE_RECENTS,
+        STORAGE_PINNED, STORAGE_DB_PARENT,
       ]);
       await clearCacheData();
       return { ok: true };
@@ -497,25 +631,37 @@ async function handleMessage(message, sender) {
       const data = await chrome.storage.local.get([
         STORAGE_TOKEN, STORAGE_DB_ID, STORAGE_DB_NAME,
         STORAGE_TRIGGER_MODE, STORAGE_ALLOWLIST, STORAGE_RECENTS,
+        STORAGE_PINNED, STORAGE_DB_PARENT,
       ]);
       const token = data[STORAGE_TOKEN];
       const dbId = data[STORAGE_DB_ID];
       const rawRecents = data[STORAGE_RECENTS] || [];
+      const allPinned = data[STORAGE_PINNED] || {};
+      const dbPinned = dbId ? (allPinned[dbId] || []) : [];
 
-      // Validate recents against live Notion data if connected
       let recents = rawRecents;
-      if (token && dbId && rawRecents.length > 0) {
-        recents = await validateRecents(rawRecents, token, dbId);
+      let pinned = dbPinned;
+      if (token && dbId) {
+        if (rawRecents.length > 0) {
+          recents = await validateRecents(rawRecents, token, dbId);
+        }
+        if (dbPinned.length > 0) {
+          pinned = await validatePinned(dbPinned, token, dbId);
+        }
       }
+
+      const displayRecents = getDisplayRecents(recents, pinned);
 
       return {
         connected: !!(token && dbId),
         hasToken: !!token,
         dbId: dbId || null,
         dbName: data[STORAGE_DB_NAME] || null,
+        dbParent: data[STORAGE_DB_PARENT] || null,
         triggerMode: data[STORAGE_TRIGGER_MODE] || MODE_AUTO_ALLOWLIST,
         allowlist: data[STORAGE_ALLOWLIST] || [],
-        recents,
+        recents: displayRecents,
+        pinned,
       };
     }
 
