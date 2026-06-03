@@ -1,5 +1,5 @@
 * {
-  margin: 0;
+  /* margin: 0; */
   padding: 0;
   box-sizing: border-box;
 }
@@ -65,7 +65,7 @@ body {
 }
 
 .pesto-section-label {
-  padding: 5px 12px 2px;
+  padding: 5px 12px 5px;
   font-size: 12px;
   font-weight: 600;
   color: #7e7a76;
@@ -78,11 +78,11 @@ body {
   display: flex;
   align-items: center;
   height: 32px;
-  padding: 4px 8px 5px;
-  gap: 7px;
-  border-radius: 6px;
+  padding: 0px 12px;
+  /* gap: 7px; */
+  border-radius: 60px;
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 400;
   color: #73726e;
   user-select: none;
 }
@@ -128,8 +128,8 @@ body {
 }
 
 .pesto-row-action {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -155,21 +155,21 @@ body {
 .pesto-segmented {
   display: flex;
   background: #f0f0ef;
-  border-radius: 6px;
-  padding: 2px;
-  margin: 4px 8px 8px;
-  gap: 2px;
+  border-radius: 60px;
+  padding: 4px;
+  margin: 5px 12px;
+  gap: 4px;
 }
 
 .pesto-segment {
   flex: 1;
-  padding: 4px 6px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 8px 8px;
+  font-size: 14px;
+  font-weight: 400;
   text-align: center;
-  border-radius: 4px;
+  border-radius: 24px;
   cursor: pointer;
-  color: #73726e;
+  color: #93918c;
   border: none;
   background: transparent;
   font-family: inherit;
@@ -180,7 +180,7 @@ body {
 .pesto-segment.active {
   background: #538700;
   color: #ffffff;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  /* box-shadow: 0 1px 2px rgba(0,0,0,0.1); */
 }
 
 .pesto-segment:hover:not(.active) {
@@ -203,13 +203,13 @@ body {
 .pesto-input {
   width: 100%;
   border: 1px solid #d4d4d4;
-  border-radius: 6px;
-  padding: 6px 8px;
+  border-radius: 100px;
+  padding: 8px 16px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   color: #2c2c2b;
   outline: none;
-  margin-bottom: 6px;
+  /* margin-bottom: 6px; */
 }
 
 .pesto-input:focus {
@@ -223,17 +223,17 @@ body {
 
 /* Buttons */
 .pesto-btn-primary {
-  width: 100%;
-  padding: 6px 12px;
+  /* width: 100%; */
+  padding: 8px 24px;
   background: #538700;
   color: #ffffff;
   border: none;
-  border-radius: 6px;
+  border-radius: 100px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  margin-bottom: 4px;
+  /* margin-bottom: 4px; */
 }
 
 .pesto-btn-primary:hover {
@@ -298,7 +298,7 @@ body {
 .pesto-site-row {
   display: flex;
   align-items: center;
-  padding: 4px 8px;
+  padding: 0px 12px;
   gap: 8px;
   font-size: 13px;
 }
@@ -306,6 +306,7 @@ body {
 .pesto-site-domain {
   flex: 1;
   color: #2c2c2b;
+
 }
 
 .pesto-site-status {
@@ -327,10 +328,10 @@ body {
 }
 
 .pesto-site-remove {
-  font-size: 12px;
-  color: #73726e;
+  font-size: 20px;
+  color: #9a9a97;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 4px 4px;
   border-radius: 3px;
 }
 
@@ -368,7 +369,7 @@ body {
 /* Footer */
 .pesto-footer {
   padding: 6px 12px;
-  font-size: 10px;
+  font-size: 12px;
   color: #b0aeab;
   text-align: center;
 }
