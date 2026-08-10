@@ -16,6 +16,7 @@ const TRASH_SVG = `<svg viewBox="0 0 24 24"><path d="M10 11v6"/><path d="M14 11v
  */
 export function createDropdownMenu({
   matches,
+  matchError,
   detectedLabel,
   inputEl,
   onSaveClick,
@@ -78,11 +79,17 @@ export function createDropdownMenu({
       menu.appendChild(row);
     });
   } else {
-    // Variant B: Save + empty state
+    // Variant B: Save + empty or error state
     const empty = document.createElement('div');
     empty.className = 'pesto-empty-state';
-    const label = detectedLabel || 'this field';
-    empty.textContent = `No saved answer for '${label}'.`;
+    if (matchError === 'reload') {
+      empty.textContent = 'Pesto was reloaded — refresh this page.';
+    } else if (matchError) {
+      empty.textContent = 'Could not load suggestions. Try refreshing the page.';
+    } else {
+      const label = detectedLabel || 'this field';
+      empty.textContent = `No saved answer for '${label}'.`;
+    }
     menu.appendChild(empty);
   }
 

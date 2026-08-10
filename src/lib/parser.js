@@ -52,7 +52,7 @@ export function splitAliases(questionText) {
 
 /**
  * Normalize a label for matching: lowercase, strip common form artifacts,
- * collapse whitespace, trim.
+ * strip filler prefixes, collapse whitespace, trim.
  */
 export function normalizeLabel(text) {
   if (!text) return '';
@@ -63,6 +63,11 @@ export function normalizeLabel(text) {
     .replace(/\(required\)/gi, '')       // strip "(required)"
     .replace(/\(optional\)/gi, '')       // strip "(optional)"
     .replace(/:\s*$/, '')                // strip trailing colon
+    .replace(/\?\s*$/, '')               // strip trailing question mark
+    // Strip common filler prefixes that carry no semantic meaning in form labels
+    .replace(/^(please\s+)?(enter\s+|provide\s+|type\s+|input\s+)?(your\s+)?/, '')
+    .replace(/^what\s+is\s+(your\s+)?/, '')
+    .replace(/^where\s+is\s+(your\s+)?/, '')
     .replace(/\s+/g, ' ')               // collapse whitespace
     .trim();
 }

@@ -23,6 +23,7 @@ function initPesto() {
   let currentInputEl = null;
   let currentLabel = null;
   let currentMatches = null;
+  let currentMatchError = null; // null | 'reload' | string error message
   let isMenuOpen = false;
   let mouseDownOnPesto = false;
   let debounceTimer = null;
@@ -134,6 +135,15 @@ function initPesto() {
   // --- Core functions ---
 
   async function requestMatches(label) {
+    currentMatchError = null;
+
+    // Detect invalidated context before even trying to message
+    if (!chrome.runtime?.id) {
+      currentMatchError = 'reload';
+      currentMatches = [];
+      return;
+    }
+
     try {
       const response = await chrome.runtime.sendMessage({
         type: MSG_MATCH_FIELD,
@@ -141,13 +151,16 @@ function initPesto() {
       });
 
       if (response?.error) {
+        currentMatchError = response.error;
         currentMatches = [];
         return;
       }
 
       currentMatches = response?.matches || [];
     } catch (err) {
-      // Extension context may have been invalidated
+      currentMatchError = err.message?.includes('Extension context invalidated')
+        ? 'reload'
+        : (err.message || 'Failed to load suggestions');
       currentMatches = [];
     }
   }
@@ -162,6 +175,7 @@ function initPesto() {
 
     currentMenu = createDropdownMenu({
       matches: currentMatches || [],
+      matchError: currentMatchError,
       detectedLabel: currentLabel,
       inputEl: currentInputEl,
       onSaveClick: () => handleImmediateSave(),
@@ -262,7 +276,13 @@ function initPesto() {
       setTimeout(() => closeMenu(), 800);
 
     } catch (err) {
-      showToast(shadowRoot, `Error: ${err.message || 'Failed to save.'}`);
+      const isInvalid = !chrome.runtime?.id ||
+        err.message?.includes('Extension context invalidated');
+      if (isInvalid) {
+        showToast(shadowRoot, 'Pesto was reloaded — please refresh this page to continue.');
+      } else {
+        showToast(shadowRoot, `Error: ${err.message || 'Failed to save.'}`);
+      }
     }
   }
 
@@ -358,5 +378,6 @@ function initPesto() {
     currentInputEl = null;
     currentLabel = null;
     currentMatches = null;
+    currentMatchError = null;
   }
 }

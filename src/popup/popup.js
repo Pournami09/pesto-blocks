@@ -50,6 +50,25 @@ if (IS_WIDGET) {
   new ResizeObserver(() => notifyParentHeight()).observe(document.documentElement);
 }
 
+// Keep the MV3 service worker alive while this popup page is open.
+// Without default_popup, Chrome no longer auto-keeps the SW alive;
+// an active chrome.runtime.Port is the standard keepalive mechanism.
+// IMPORTANT: the port must be held in a variable — if it's not referenced,
+// the JS GC collects it immediately, closing the port and killing the keepalive.
+// The port is automatically disconnected when this document is unloaded
+// (iframe reload or tab close), allowing the SW to sleep again.
+let _swKeepalive = null;
+function _connectKeepalive() {
+  try {
+    _swKeepalive = chrome.runtime.connect({ name: 'pesto-popup' });
+    _swKeepalive.onDisconnect.addListener(() => {
+      // SW was terminated and restarted — reconnect to keep it alive
+      if (chrome.runtime?.id) _connectKeepalive();
+    });
+  } catch { /* ignore: extension context invalid on restricted pages */ }
+}
+_connectKeepalive();
+
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {

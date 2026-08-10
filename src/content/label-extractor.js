@@ -1,8 +1,92 @@
 /**
- * Extract a label for a text input element using a 7-tier priority system.
+ * Generic/placeholder labels used by form builders instead of real field names.
+ * Google Forms uses aria-label="Your answer" on every short-answer field;
+ * the actual question title lives in a sibling heading element.
+ * When one of these is detected we fall back to findQuestionHeading().
+ */
+const GENERIC_LABELS = new Set([
+  'your answer',
+  'short answer',
+  'long answer',
+  'paragraph',
+  'your response',
+  'enter your answer',
+  'type your answer',
+  'write your answer',
+  'this field',
+  'enter this field',
+  'answer',
+]);
+
+function isGenericLabel(text) {
+  if (!text) return false;
+  return GENERIC_LABELS.has(text.toLowerCase().trim());
+}
+
+/**
+ * For form builders that put the question title in a heading element that is
+ * a sibling (or ancestor-sibling) of the input's container — rather than
+ * wiring it up via aria-labelledby or <label for> — climb up the DOM and
+ * scan previous siblings for the nearest [role="heading"] or <h1-h6>.
+ * Stops at <form>, <body>, or after 10 levels.
+ */
+function findQuestionHeading(inputEl) {
+  let node = inputEl;
+
+  for (let depth = 0; depth < 10; depth++) {
+    node = node.parentElement;
+    if (!node || node === document.body || node.tagName === 'FORM') break;
+
+    let sibling = node.previousElementSibling;
+    while (sibling) {
+      // Skip invisible siblings
+      if (sibling.offsetParent === null && sibling.tagName !== 'BODY') {
+        sibling = sibling.previousElementSibling;
+        continue;
+      }
+
+      // Heading selector — covers ARIA and native heading tags
+      const HEADING_SEL = '[role="heading"], h1, h2, h3, h4, h5, h6';
+
+      // The sibling itself might be the heading
+      const headingEl = sibling.matches(HEADING_SEL)
+        ? sibling
+        : sibling.querySelector(HEADING_SEL);
+
+      if (headingEl) {
+        const text = cleanLabel(headingEl.textContent);
+        if (text && text.length >= 2) return text;
+      }
+
+      sibling = sibling.previousElementSibling;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract a label for a text input element using a 7-tier priority system,
+ * with an automatic fallback for form-builder generic labels (Tier 8).
  * Returns a cleaned label string or null if no label can be found.
  */
 export function extractLabel(inputEl) {
+  const label = extractLabelDirect(inputEl);
+
+  // Tier 8: if the standard tiers returned a generic form-builder placeholder
+  // (e.g. Google Forms aria-label="Your answer"), look for the actual question
+  // title in the surrounding heading structure instead.
+  if (label && isGenericLabel(label)) {
+    return findQuestionHeading(inputEl) ?? label;
+  }
+
+  return label;
+}
+
+/**
+ * Internal: run tiers 1–7 and return the first match found.
+ */
+function extractLabelDirect(inputEl) {
   // Tier 1: aria-label
   const ariaLabel = inputEl.getAttribute('aria-label');
   if (ariaLabel?.trim()) return cleanLabel(ariaLabel);

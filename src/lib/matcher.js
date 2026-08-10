@@ -1,4 +1,5 @@
 import { splitAliases, parseOptions, normalizeLabel } from './parser.js';
+import { applySynonyms } from './synonyms.js';
 import { FUZZY_THRESHOLD } from './constants.js';
 
 /**
@@ -91,6 +92,41 @@ export function diceCoefficient(s1, s2) {
 }
 
 /**
+ * Word-level Jaccard similarity.
+ * Splits both strings on whitespace and computes |intersection| / |union|.
+ * Good for catching token-overlap matches like "Years of Experience" vs
+ * "Number of Years Experience".
+ */
+export function tokenJaccard(s1, s2) {
+  const t1 = new Set(s1.split(/\s+/).filter(Boolean));
+  const t2 = new Set(s2.split(/\s+/).filter(Boolean));
+  if (t1.size === 0 && t2.size === 0) return 1.0;
+  if (t1.size === 0 || t2.size === 0) return 0.0;
+
+  let intersection = 0;
+  for (const word of t1) {
+    if (t2.has(word)) intersection++;
+  }
+
+  const union = t1.size + t2.size - intersection;
+  return intersection / union;
+}
+
+/**
+ * Proportional containment score.
+ * If one string contains the other, returns shorter.length / longer.length.
+ * Good for "LinkedIn" vs "LinkedIn URL" (returns ~0.73).
+ */
+export function containmentScore(s1, s2) {
+  if (!s1 || !s2) return 0.0;
+  if (s1 === s2) return 1.0;
+  if (s1.includes(s2) || s2.includes(s1)) {
+    return Math.min(s1.length, s2.length) / Math.max(s1.length, s2.length);
+  }
+  return 0.0;
+}
+
+/**
  * Build a search index from raw Notion rows.
  * Input: array of { id, question, answer }
  * Output: array of { id, canonical, aliases, normalizedAliases, options }
@@ -100,12 +136,14 @@ export function buildIndex(rows) {
     const { canonical, aliases } = splitAliases(row.question);
     const options = parseOptions(row.answer);
     const normalizedAliases = aliases.map((a) => normalizeLabel(a));
+    const synonymNormalizedAliases = normalizedAliases.map((a) => applySynonyms(a));
 
     return {
       id: row.id,
       canonical,
       aliases,
       normalizedAliases,
+      synonymNormalizedAliases,
       options,
       rawAnswer: row.answer,
     };
@@ -122,24 +160,39 @@ export function findMatches(extractedLabel, index, threshold = FUZZY_THRESHOLD) 
   const normalizedInput = normalizeLabel(extractedLabel);
   if (!normalizedInput) return [];
 
+  // Apply synonym normalization to the query so that e.g. "mobile number"
+  // is treated as "phone number" when scoring against index entries.
+  const synonymInput = applySynonyms(normalizedInput);
+
   const results = [];
 
   for (const entry of index) {
     let bestScore = 0;
 
-    for (const alias of entry.normalizedAliases) {
+    for (let i = 0; i < entry.normalizedAliases.length; i++) {
+      const alias = entry.normalizedAliases[i];
       if (!alias) continue;
 
-      // Tier 1: Exact match
+      // Tier 1: Exact match on normalized alias
       if (normalizedInput === alias) {
         bestScore = 1.0;
         break;
       }
 
-      // Tier 2: Fuzzy match
+      // Tier 2: Exact synonym match — both sides resolve to the same canonical
+      // Use optional chaining: old cached index entries may not have this field.
+      const synonymAlias = entry.synonymNormalizedAliases?.[i];
+      if (synonymInput === synonymAlias && synonymInput !== normalizedInput) {
+        // High confidence but distinct from a true exact match
+        if (0.95 > bestScore) bestScore = 0.95;
+      }
+
+      // Tier 3: Combined fuzzy + structural signals
       const jw = jaroWinkler(normalizedInput, alias);
       const dice = diceCoefficient(normalizedInput, alias);
-      const score = Math.max(jw, dice);
+      const jaccard = tokenJaccard(normalizedInput, alias);
+      const contain = containmentScore(normalizedInput, alias);
+      const score = Math.max(jw, dice, jaccard, contain);
       if (score > bestScore) {
         bestScore = score;
       }
