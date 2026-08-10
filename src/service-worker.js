@@ -87,6 +87,24 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 // ---------------------------------------------------------------------------
+// Widget toggle — inject widget.js into the active tab on icon click
+// ---------------------------------------------------------------------------
+// With no default_popup, clicking the extension icon fires onClicked.
+// We inject a script that creates a <pesto-widget> custom element with
+// Shadow DOM + iframe, giving full CSS control (border-radius, shadow, etc.).
+
+chrome.action.onClicked.addListener(async (tab) => {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['widget.js'],
+    });
+  } catch (err) {
+    console.error('Pesto: could not inject widget into this tab:', err.message);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -417,6 +435,7 @@ async function handleMessage(message, sender) {
         await chrome.storage.local.set({
           [STORAGE_DB_ID]: dbId,
           [STORAGE_DB_NAME]: result.dbName,
+          [STORAGE_DB_PARENT]: result.parentPageTitle || null,
         });
         // Clear recents and cache — different database means different data
         await chrome.storage.local.remove([STORAGE_RECENTS]);
@@ -535,6 +554,7 @@ async function handleMessage(message, sender) {
       await chrome.storage.local.set({
         [STORAGE_DB_ID]: newDbId,
         [STORAGE_DB_NAME]: result.dbName,
+        [STORAGE_DB_PARENT]: result.parentPageTitle || null,
       });
       // Clear recents and cache; pinned items are per-DB and persist
       await chrome.storage.local.remove([STORAGE_RECENTS]);
