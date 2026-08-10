@@ -314,6 +314,20 @@ export async function testConnection(token, dbId) {
       };
     }
 
+    // Fetch parent page title for breadcrumb
+    let parentPageTitle = null;
+    if (dbMeta.parent?.type === 'page_id') {
+      try {
+        const parentPage = await notionFetch(token, `/pages/${dbMeta.parent.page_id}`, { method: 'GET' });
+        for (const prop of Object.values(parentPage.properties || {})) {
+          if (prop.type === 'title' && prop.title?.length) {
+            parentPageTitle = prop.title.map((rt) => rt.plain_text).join('');
+            break;
+          }
+        }
+      } catch { /* parent page might not be accessible */ }
+    }
+
     // Query to get row count
     const queryResult = await notionFetch(token, `/databases/${dbId}/query`, {
       method: 'POST',
@@ -326,6 +340,7 @@ export async function testConnection(token, dbId) {
     return {
       valid: true,
       dbName,
+      parentPageTitle,
       rowCount: queryResult.has_more ? '100+' : String(queryResult.results.length),
     };
   } catch (err) {

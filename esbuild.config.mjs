@@ -34,6 +34,11 @@ const entryPoints = [
     outfile: resolve(__dirname, 'dist/onboarding/onboarding.js'),
     format: 'iife',
   },
+  {
+    entryPoints: [resolve(__dirname, 'src/widget/widget.js')],
+    outfile: resolve(__dirname, 'dist/widget.js'),
+    format: 'iife',
+  },
 ];
 
 function copyStaticFiles() {

@@ -5,36 +5,22 @@
 }
 
 body {
-  width: 412px;
+  width: 100%;
+  margin: 0;
   font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   color: #2c2c2b;
   background: #ffffff;
   font-size: 14px;
   line-height: 20px;
   letter-spacing: -0.04em;
+  overflow-y: auto;
 }
 
 #pesto-popup {
   padding: 4px;
-  opacity: 0;
-  transform: translateY(4px);
-}
-
-#pesto-popup.ready {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 150ms cubic-bezier(0.215, 0.61, 0.355, 1),
-              transform 150ms cubic-bezier(0.215, 0.61, 0.355, 1);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  #pesto-popup {
-    opacity: 1;
-    transform: none;
-  }
-  #pesto-popup.ready {
-    transition: none;
-  }
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header */
@@ -478,8 +464,19 @@ body {
 
 /* Footer */
 .pesto-footer {
+  margin-top: auto;
   padding: 6px 12px;
   font-size: 12px;
   color: #b0aeab;
   text-align: center;
+}
+
+.pesto-footer a {
+  color: #b0aeab;
+  text-decoration: none;
+}
+
+.pesto-footer a:hover {
+  color: #73726e;
+  text-decoration: underline;
 }

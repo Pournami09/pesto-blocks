@@ -5,7 +5,6 @@ import {
   MSG_LOCK, MSG_ARM_TAB,
   MSG_DELETE_OPTION, MSG_ARCHIVE_ROW,
   MSG_PIN_RECENT, MSG_UNPIN_RECENT, MSG_DISMISS_RECENT,
-  MSG_SEARCH_DATABASES, MSG_SWITCH_DATABASE,
   STORAGE_TOKEN, STORAGE_DB_ID, STORAGE_DB_NAME,
   STORAGE_TRIGGER_MODE, STORAGE_ALLOWLIST, STORAGE_RECENTS,
   STORAGE_PINNED, STORAGE_DB_PARENT,
@@ -24,10 +23,36 @@ const root = document.getElementById('pesto-popup');
 
 const LOGO_SVG = `<svg width="20" height="20" viewBox="0 0 51 51" fill="none"><rect x="10.5" y="4.5" width="30" height="19" rx="2" fill="#538700"/><rect x="10.5" y="27.5" width="16" height="19" rx="2" fill="#538700"/></svg>`;
 
+/** True when loaded inside the widget iframe (vs. standalone popup) */
+const IS_WIDGET = window.parent !== window;
+
+/** Notify the widget container of the current content height */
+function notifyParentHeight() {
+  if (IS_WIDGET) {
+    window.parent.postMessage({
+      type: 'PESTO_WIDGET_RESIZE',
+      height: document.documentElement.scrollHeight,
+    }, '*');
+  }
+}
+
+/** Close the popup — works in both widget iframe and standalone contexts */
+function closePopup() {
+  if (IS_WIDGET) {
+    window.parent.postMessage({ type: 'PESTO_WIDGET_CLOSE' }, '*');
+  } else {
+    window.close();
+  }
+}
+
+// Auto-detect height changes and notify the widget container
+if (IS_WIDGET) {
+  new ResizeObserver(() => notifyParentHeight()).observe(document.documentElement);
+}
+
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
-  root.classList.remove('ready');
   try {
     // Read directly from local storage — no Notion API calls, instant render
     const data = await chrome.storage.local.get([
@@ -66,7 +91,6 @@ async function init() {
   } catch (err) {
     root.innerHTML = `<div class="pesto-status error">Failed to load: ${err.message}</div>`;
   }
-  requestAnimationFrame(() => root.classList.add('ready'));
 }
 
 // ---------------------------------------------------------------------------
@@ -238,27 +262,16 @@ function renderConnected(state) {
   header.innerHTML = `<div class="pesto-logo-small">${LOGO_SVG}</div><div class="pesto-header-title">Pesto</div>`;
   root.appendChild(header);
 
-  // DB selector with breadcrumb
-  const dbSelector = el('div', 'pesto-db-selector');
-
-  if (state.dbParent) {
-    const breadcrumb = el('div', 'pesto-breadcrumb');
-    breadcrumb.innerHTML = `<span class="pesto-breadcrumb-parent">${esc(state.dbParent)}</span><span class="pesto-breadcrumb-sep"> / </span><span class="pesto-breadcrumb-db">${esc(state.dbName || 'database')}</span>`;
-    dbSelector.appendChild(breadcrumb);
-  }
-
-  const selectorRow = el('div', 'pesto-db-selector-row');
-  selectorRow.innerHTML = `<div class="pesto-dot"></div>`;
-  const selectorText = el('span', 'pesto-db-selector-text');
-  selectorText.textContent = state.dbName || 'database';
-  selectorRow.appendChild(selectorText);
-  const chevron = el('span', 'pesto-db-chevron');
-  chevron.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
-  selectorRow.appendChild(chevron);
-  selectorRow.addEventListener('click', () => toggleDbDropdown(dbSelector, state));
-  dbSelector.appendChild(selectorRow);
-
-  root.appendChild(dbSelector);
+  // Connection status with breadcrumb
+  const connectionChip = el('div', 'pesto-connection-chip');
+  connectionChip.innerHTML = `<div class="pesto-dot"></div>`;
+  const breadcrumbText = state.dbParent
+    ? `${esc(state.dbParent)} / ${esc(state.dbName || 'database')}`
+    : esc(state.dbName || 'Connected');
+  const chipText = document.createElement('span');
+  chipText.innerHTML = breadcrumbText;
+  connectionChip.appendChild(chipText);
+  root.appendChild(connectionChip);
 
   // Mode 3: Arm this tab button
   if (state.triggerMode === MODE_CLICK_TO_ARM) {
@@ -273,7 +286,7 @@ function renderConnected(state) {
         if (tab) {
           await chrome.runtime.sendMessage({ type: MSG_ARM_TAB, tabId: tab.id });
           armText.textContent = 'Armed!';
-          setTimeout(() => window.close(), 500);
+          setTimeout(() => closePopup(), 500);
         }
       } catch (err) {
         armText.textContent = `Error: ${err.message}`;
@@ -324,7 +337,7 @@ function renderConnected(state) {
 
   // Footer
   const footer = el('div', 'pesto-footer');
-  footer.textContent = 'Not affiliated with Notion';
+  footer.innerHTML = 'Built by <a href="https://www.linkedin.com/in/pournamipottekat" target="_blank" rel="noopener">Pournami Pottekat</a> &middot; Not affiliated with Notion';
   root.appendChild(footer);
 }
 
@@ -478,67 +491,6 @@ async function addSite(domainInput) {
   init();
 }
 
-async function toggleDbDropdown(container, state) {
-  const existing = container.querySelector('.pesto-db-dropdown');
-  if (existing) {
-    existing.remove();
-    return;
-  }
-
-  const dropdown = el('div', 'pesto-db-dropdown');
-  const loading = el('div', 'pesto-status info');
-  loading.textContent = 'Loading databases...';
-  dropdown.appendChild(loading);
-  container.appendChild(dropdown);
-
-  try {
-    const result = await chrome.runtime.sendMessage({ type: MSG_SEARCH_DATABASES });
-    const databases = result.databases || [];
-
-    dropdown.innerHTML = '';
-
-    if (databases.length === 0) {
-      const empty = el('div', 'pesto-status info');
-      empty.textContent = 'No Pesto databases found.';
-      dropdown.appendChild(empty);
-      return;
-    }
-
-    for (const db of databases) {
-      const option = el('div', 'pesto-db-option');
-      const normalizedNewId = db.id.replace(/-/g, '');
-      const normalizedCurrentId = (state.dbId || '').replace(/-/g, '');
-      if (normalizedNewId === normalizedCurrentId) {
-        option.classList.add('active');
-      }
-
-      const optBreadcrumb = el('div', 'pesto-db-option-breadcrumb');
-      optBreadcrumb.textContent = db.parentPageTitle;
-      option.appendChild(optBreadcrumb);
-
-      const optName = el('div', 'pesto-db-option-name');
-      optName.textContent = db.title;
-      option.appendChild(optName);
-
-      option.addEventListener('click', async () => {
-        if (normalizedNewId === normalizedCurrentId) {
-          dropdown.remove();
-          return;
-        }
-        optName.textContent = 'Switching...';
-        await chrome.runtime.sendMessage({ type: MSG_SWITCH_DATABASE, dbId: db.id });
-        init();
-      });
-
-      dropdown.appendChild(option);
-    }
-  } catch (err) {
-    dropdown.innerHTML = '';
-    const errMsg = el('div', 'pesto-status error');
-    errMsg.textContent = `Error: ${err.message}`;
-    dropdown.appendChild(errMsg);
-  }
-}
 
 function renderPinnedAndRecents(pinned, recents) {
   const section = el('div', 'pesto-section');
