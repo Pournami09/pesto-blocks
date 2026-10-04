@@ -10,14 +10,13 @@ export function insertText(inputEl, text) {
   if (!inputEl || !text) return;
 
   const currentValue = inputEl.value || '';
-  let newValue;
 
-  if (!currentValue.trim()) {
-    newValue = text;
-  } else {
-    const separator = inputEl.tagName === 'TEXTAREA' ? '\n' : ' ';
-    newValue = currentValue + separator + text;
+  if (currentValue.trim() === text.trim()) {
+    // Already inserted — nothing to do
+    return;
   }
+
+  const newValue = text;
 
   // Use the native prototype setter to bypass framework wrappers
   const prototype =

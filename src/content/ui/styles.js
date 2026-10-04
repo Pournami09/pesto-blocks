@@ -169,7 +169,7 @@ export const PESTO_STYLES = `
   /* Recents label */
   .pesto-recents-label {
     padding: 5px var(--pesto-spacer-600) 2px var(--pesto-spacer-600);
-    font-size: 12px;
+    font-size: 14px;
     line-height: 16px;
     font-weight: 600;
     letter-spacing: -0.04em;
@@ -264,7 +264,7 @@ export const PESTO_STYLES = `
   /* Empty state */
   .pesto-empty-state {
     padding: 8px 12px;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 18px;
     color: var(--pesto-text-muted);
     font-style: italic;
@@ -280,7 +280,7 @@ export const PESTO_STYLES = `
     padding: 8px 9px;
     width: 318px;
     font-family: var(--pesto-font);
-    font-size: 12px;
+    font-size: 14px;
     line-height: 20px;
     font-weight: 500;
     letter-spacing: -0.04em;
@@ -297,7 +297,7 @@ export const PESTO_STYLES = `
 
   .pesto-save-form label {
     display: block;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--pesto-text-muted);
     margin-bottom: 4px;
@@ -331,7 +331,7 @@ export const PESTO_STYLES = `
   }
 
   .pesto-char-count {
-    font-size: 11px;
+    font-size: 14px;
     color: var(--pesto-text-muted);
     text-align: right;
     margin-top: -4px;
@@ -357,7 +357,7 @@ export const PESTO_STYLES = `
     padding: 4px 12px;
     border-radius: var(--pesto-radius-base);
     font-family: var(--pesto-font);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     border: 1px solid transparent;
@@ -391,7 +391,7 @@ export const PESTO_STYLES = `
   }
 
   .pesto-save-error {
-    font-size: 12px;
+    font-size: 14px;
     color: var(--pesto-destructive-red);
     margin-bottom: 6px;
   }
@@ -408,7 +408,7 @@ export const PESTO_STYLES = `
     border-radius: var(--pesto-radius-base);
     padding: 10px 16px;
     font-family: var(--pesto-font);
-    font-size: 13px;
+    font-size: 14px;
     line-height: 18px;
     font-weight: 500;
     letter-spacing: -0.04em;
@@ -431,7 +431,7 @@ export const PESTO_STYLES = `
     border: 1px solid rgba(255,255,255,0.3);
     border-radius: 4px;
     font-family: var(--pesto-font);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     pointer-events: auto;
@@ -474,7 +474,7 @@ export const PESTO_STYLES = `
   }
 
   .pesto-confirm-body {
-    font-size: 13px;
+    font-size: 14px;
     line-height: 18px;
     color: var(--pesto-text-weak);
     margin-bottom: 16px;
@@ -490,7 +490,7 @@ export const PESTO_STYLES = `
     padding: 6px 14px;
     border-radius: var(--pesto-radius-base);
     font-family: var(--pesto-font);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     border: 1px solid var(--pesto-destructive-red);
@@ -507,7 +507,7 @@ export const PESTO_STYLES = `
     padding: 6px 14px;
     border-radius: var(--pesto-radius-base);
     font-family: var(--pesto-font);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     border: 1px solid #d4d4d4;

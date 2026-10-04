@@ -21,6 +21,25 @@ import { extractDbId } from '../lib/notion-api.js';
 
 const root = document.getElementById('pesto-popup');
 
+const KNOWN_JOB_SITES = [
+  'greenhouse.io',
+  'lever.co',
+  'workday.com',
+  'myworkdayjobs.com',
+  'linkedin.com',
+  'indeed.com',
+  'smartrecruiters.com',
+  'ashbyhq.com',
+  'icims.com',
+  'jobvite.com',
+  'bamboohr.com',
+  'workable.com',
+  'wellfound.com',
+  'dover.io',
+  'taleo.net',
+  'successfactors.com',
+];
+
 const LOGO_SVG = `<svg width="20" height="20" viewBox="0 0 51 51" fill="none"><rect x="10.5" y="4.5" width="30" height="19" rx="2" fill="#538700"/><rect x="10.5" y="27.5" width="16" height="19" rx="2" fill="#538700"/></svg>`;
 
 /** True when loaded inside the widget iframe (vs. standalone popup) */
@@ -113,16 +132,55 @@ async function init() {
 }
 
 // ---------------------------------------------------------------------------
+// Shared header builder
+// ---------------------------------------------------------------------------
+
+function buildHeader() {
+  const CLOSE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+  const GRAB_SVG = `<svg viewBox="0 0 10 16" fill="currentColor"><circle cx="3" cy="3" r="1.5"/><circle cx="7" cy="3" r="1.5"/><circle cx="3" cy="8" r="1.5"/><circle cx="7" cy="8" r="1.5"/><circle cx="3" cy="13" r="1.5"/><circle cx="7" cy="13" r="1.5"/></svg>`;
+
+  const header = el('div', 'pesto-header');
+
+  const grabHandle = el('button', 'pesto-header-grab');
+  grabHandle.innerHTML = GRAB_SVG;
+  grabHandle.title = 'Move';
+  if (!IS_WIDGET) grabHandle.style.display = 'none';
+  grabHandle.addEventListener('mousedown', (e) => {
+    if (!IS_WIDGET) return;
+    e.preventDefault();
+    window.parent.postMessage({
+      type: 'PESTO_WIDGET_DRAG_START',
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+    }, '*');
+  });
+  header.appendChild(grabHandle);
+
+  const logo = el('div', 'pesto-logo-small');
+  logo.innerHTML = LOGO_SVG;
+  header.appendChild(logo);
+
+  const title = el('div', 'pesto-header-title');
+  title.textContent = 'Pesto';
+  header.appendChild(title);
+
+  const closeBtn = el('button', 'pesto-header-close');
+  closeBtn.innerHTML = CLOSE_SVG;
+  closeBtn.title = 'Close';
+  closeBtn.addEventListener('click', closePopup);
+  header.appendChild(closeBtn);
+
+  return header;
+}
+
+// ---------------------------------------------------------------------------
 // Not connected view
 // ---------------------------------------------------------------------------
 
 function renderNotConnected(state) {
   root.innerHTML = '';
 
-  // Header
-  const header = el('div', 'pesto-header');
-  header.innerHTML = `<div class="pesto-logo-small">${LOGO_SVG}</div><div class="pesto-header-title">Pesto</div>`;
-  root.appendChild(header);
+  root.appendChild(buildHeader());
 
   // Status
   const chip = el('div', 'pesto-connection-chip');
@@ -276,10 +334,7 @@ async function showCreateDbFlow(container) {
 function renderConnected(state) {
   root.innerHTML = '';
 
-  // Header
-  const header = el('div', 'pesto-header');
-  header.innerHTML = `<div class="pesto-logo-small">${LOGO_SVG}</div><div class="pesto-header-title">Pesto</div>`;
-  root.appendChild(header);
+  root.appendChild(buildHeader());
 
   // Connection status with breadcrumb
   const connectionChip = el('div', 'pesto-connection-chip');
@@ -290,6 +345,18 @@ function renderConnected(state) {
   const chipText = document.createElement('span');
   chipText.innerHTML = breadcrumbText;
   connectionChip.appendChild(chipText);
+
+  // "Open in Notion" link — direct URL to the connected database
+  if (state.dbId) {
+    const notionLink = document.createElement('a');
+    notionLink.className = 'pesto-notion-link';
+    notionLink.href = `https://www.notion.so/${state.dbId.replace(/-/g, '')}`;
+    notionLink.target = '_blank';
+    notionLink.rel = 'noopener noreferrer';
+    notionLink.textContent = 'Open in Notion ↗';
+    connectionChip.appendChild(notionLink);
+  }
+
   root.appendChild(connectionChip);
 
   // Mode 3: Arm this tab button
@@ -339,6 +406,10 @@ function renderConnected(state) {
   }
   root.appendChild(segmented);
 
+  // Pinned (above My Sites)
+  const pinnedSection = renderPinned(state.pinned);
+  if (pinnedSection) root.appendChild(pinnedSection);
+
   // Allowlist section (Mode 2 only)
   if (state.triggerMode === MODE_AUTO_ALLOWLIST) {
     renderAllowlist(state.allowlist);
@@ -346,8 +417,8 @@ function renderConnected(state) {
 
   root.appendChild(el('div', 'pesto-divider'));
 
-  // Pinned + Recents
-  renderPinnedAndRecents(state.pinned, state.recents);
+  // Recents
+  renderRecents(state.recents);
 
   root.appendChild(el('div', 'pesto-divider'));
 
@@ -377,24 +448,38 @@ async function handleModeSwitch(newMode, currentMode) {
 }
 
 function renderAllowlist(allowlist) {
+  const SMALL_X_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+
   const section = el('div', 'pesto-section');
   const label = el('div', 'pesto-section-label');
   label.textContent = 'My sites';
   section.appendChild(label);
 
-  // Site rows
+  const badgesWrap = el('div', 'pesto-site-badges');
+
   for (const site of allowlist) {
-    const row = el('div', 'pesto-site-row');
+    const badge = el('span', `pesto-site-badge ${site.status === 'granted' ? 'active' : 'revoked'}`);
 
-    const domain = el('span', 'pesto-site-domain');
-    domain.textContent = site.label || site.domain;
-    row.appendChild(domain);
+    const badgeText = el('span', 'pesto-site-badge-text');
+    badgeText.textContent = site.label || site.domain;
+    badge.appendChild(badgeText);
 
-    const status = el('span', `pesto-site-status ${site.status}`);
-    status.textContent = site.status === 'granted' ? 'Active' : 'Revoked';
+    const removeBtn = el('span', 'pesto-site-badge-remove');
+    removeBtn.innerHTML = SMALL_X_SVG;
+    removeBtn.title = 'Remove';
+    removeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try { await removeOrigin(site.domain); } catch { /* ignore */ }
+      await chrome.runtime.sendMessage({ type: MSG_REMOVE_SITE, domain: site.domain });
+      init();
+    });
+    badge.appendChild(removeBtn);
+
     if (site.status === 'revoked') {
-      status.title = 'Click to re-grant';
-      status.addEventListener('click', async () => {
+      badge.title = 'Click to re-grant';
+      badge.style.cursor = 'pointer';
+      badge.addEventListener('click', async (e) => {
+        if (e.target.closest('.pesto-site-badge-remove')) return;
         const granted = await requestOrigins(site.patterns);
         if (granted) {
           await chrome.runtime.sendMessage({
@@ -408,31 +493,15 @@ function renderAllowlist(allowlist) {
         }
       });
     }
-    row.appendChild(status);
 
-    const remove = el('span', 'pesto-site-remove');
-    remove.textContent = '×';
-    remove.title = 'Remove';
-    remove.addEventListener('click', async () => {
-      for (const pattern of site.patterns) {
-        try { await removeOrigin(site.domain); } catch { /* ignore */ }
-      }
-      await chrome.runtime.sendMessage({ type: MSG_REMOVE_SITE, domain: site.domain });
-      init();
-    });
-    row.appendChild(remove);
-
-    section.appendChild(row);
+    badgesWrap.appendChild(badge);
   }
 
-  // Add site row
-  const addRow = el('div', 'pesto-row primary');
-  addRow.innerHTML = `<div class="pesto-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>`;
-  const addText = el('span', 'pesto-row-text');
-  addText.textContent = 'Add site';
-  addRow.appendChild(addText);
-  addRow.addEventListener('click', () => showAddSiteInput(section));
-  section.appendChild(addRow);
+  // Add site button
+  const addBtn = el('button', 'pesto-site-add-btn');
+  addBtn.textContent = '+ Add site';
+  addBtn.addEventListener('click', () => showSiteSelector(section, allowlist));
+  badgesWrap.appendChild(addBtn);
 
   // Add current site shortcut
   chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
@@ -441,48 +510,110 @@ function renderAllowlist(allowlist) {
         const host = new URL(tab.url).hostname.replace(/^www\./, '');
         const alreadyListed = allowlist.some((s) => s.domain === host);
         if (!alreadyListed && host && host.includes('.')) {
-          const addCurrentRow = el('div', 'pesto-row');
-          addCurrentRow.innerHTML = `<div class="pesto-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></div>`;
-          const currentText = el('span', 'pesto-row-text');
-          currentText.textContent = `Add ${host}`;
-          addCurrentRow.appendChild(currentText);
-          addCurrentRow.addEventListener('click', async () => {
-            await addSite(host);
-          });
-          section.appendChild(addCurrentRow);
+          const addCurrentBtn = el('button', 'pesto-site-add-btn');
+          addCurrentBtn.textContent = `+ Add ${host}`;
+          addCurrentBtn.addEventListener('click', async () => { await addSite(host); });
+          badgesWrap.appendChild(addCurrentBtn);
         }
       } catch { /* ignore invalid URLs */ }
     }
   });
 
+  section.appendChild(badgesWrap);
   root.appendChild(section);
 }
 
-function showAddSiteInput(container) {
-  // Check if already showing
-  if (container.querySelector('.pesto-add-site-input')) return;
+function showSiteSelector(container, allowlist) {
+  const CHECK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
 
-  const group = el('div', 'pesto-input-group pesto-add-site-input');
-  const input = el('input', 'pesto-input');
-  input.placeholder = 'e.g., greenhouse.io';
-  input.addEventListener('keydown', async (e) => {
-    if (e.key === 'Enter') {
-      const domain = input.value.trim();
-      if (domain) await addSite(domain);
+  // Toggle: clicking "+ Add site" again closes the selector and syncs the full popup
+  const existing = container.querySelector('.pesto-site-selector');
+  if (existing) { existing.remove(); init(); return; }
+
+  // Combine known sites with any custom domains already in the allowlist
+  const customDomains = allowlist
+    .map((s) => s.domain)
+    .filter((d) => !KNOWN_JOB_SITES.includes(d));
+  const allSites = [...KNOWN_JOB_SITES, ...customDomains];
+
+  // Local mutable snapshot — updated after each add/remove so the list
+  // re-renders in place without destroying and rebuilding the whole popup.
+  const localList = allowlist.map((s) => ({ ...s }));
+
+  const panel = el('div', 'pesto-site-selector');
+
+  const searchInput = el('input', 'pesto-site-selector-input');
+  searchInput.placeholder = 'Search or enter domain...';
+  panel.appendChild(searchInput);
+
+  const list = el('div', 'pesto-site-list');
+  panel.appendChild(list);
+
+  // Add a site without calling init() — updates localList and re-renders the list only
+  async function handleAdd(domain) {
+    const host = domain.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split(':')[0].toLowerCase();
+    if (!host || !host.includes('.')) return;
+    if (isBroadDomain(host)) {
+      if (!confirm(`This will run Pesto on every ${host} page. Continue?`)) return;
     }
-  });
-  group.appendChild(input);
+    const pattern = normalizeToPattern(host);
+    if (!pattern) return;
+    const granted = await requestOrigins([pattern]);
+    if (!granted) return;
+    await chrome.runtime.sendMessage({ type: MSG_ADD_SITE, domain: host, patterns: [pattern], label: host, status: 'granted' });
+    localList.push({ domain: host, patterns: [pattern], label: host, status: 'granted' });
+    if (!allSites.includes(host)) allSites.push(host);
+    renderList(searchInput.value);
+  }
 
-  const btn = el('button', 'pesto-btn-primary');
-  btn.textContent = 'Add';
-  btn.addEventListener('click', async () => {
-    const domain = input.value.trim();
-    if (domain) await addSite(domain);
-  });
-  group.appendChild(btn);
+  // Remove a site without calling init()
+  async function handleRemove(siteObj) {
+    try { await removeOrigin(siteObj.domain); } catch { /* ignore */ }
+    await chrome.runtime.sendMessage({ type: MSG_REMOVE_SITE, domain: siteObj.domain });
+    const idx = localList.findIndex((s) => s.domain === siteObj.domain);
+    if (idx !== -1) localList.splice(idx, 1);
+    renderList(searchInput.value);
+  }
 
-  container.appendChild(group);
-  input.focus();
+  function buildRow(domain) {
+    const siteObj = localList.find((s) => s.domain === domain);
+    const isAdded = !!siteObj;
+    const row = el('div', `pesto-site-list-item${isAdded ? ' checked' : ''}`);
+    const indicator = el('span', 'pesto-site-check');
+    if (isAdded) indicator.innerHTML = CHECK_SVG;
+    row.appendChild(indicator);
+    const label = el('span', 'pesto-site-list-label');
+    label.textContent = domain;
+    row.appendChild(label);
+    row.addEventListener('click', () => {
+      if (isAdded) handleRemove(siteObj);
+      else handleAdd(domain);
+    });
+    return row;
+  }
+
+  function renderList(query) {
+    list.innerHTML = '';
+    const q = query.toLowerCase().trim();
+    const filtered = q ? allSites.filter((s) => s.includes(q)) : allSites;
+
+    const isNewDomain = q && q.includes('.') && !allSites.some((s) => s === q);
+    if (isNewDomain) list.appendChild(buildRow(q));
+
+    for (const domain of filtered) list.appendChild(buildRow(domain));
+
+    if (list.childElementCount === 0) {
+      const empty = el('div', 'pesto-site-list-empty');
+      empty.textContent = 'No matching sites — type a full domain to add it.';
+      list.appendChild(empty);
+    }
+  }
+
+  searchInput.addEventListener('input', () => renderList(searchInput.value));
+  renderList('');
+
+  container.appendChild(panel);
+  searchInput.focus();
 }
 
 async function addSite(domainInput) {
@@ -511,48 +642,49 @@ async function addSite(domainInput) {
 }
 
 
-function renderPinnedAndRecents(pinned, recents) {
+/** Returns the pinned section element, or null if there are no pinned items. */
+function renderPinned(pinned) {
+  if (!pinned || pinned.length === 0) return null;
+
   const section = el('div', 'pesto-section');
+  const pinnedLabel = el('div', 'pesto-section-label');
+  pinnedLabel.textContent = 'Pinned';
+  section.appendChild(pinnedLabel);
 
-  // Pinned section
-  if (pinned && pinned.length > 0) {
-    const pinnedLabel = el('div', 'pesto-section-label');
-    pinnedLabel.textContent = 'Pinned';
-    section.appendChild(pinnedLabel);
+  for (const item of pinned) {
+    const row = el('div', 'pesto-row');
 
-    for (const item of pinned) {
-      const row = el('div', 'pesto-row');
+    const text = el('span', 'pesto-row-text');
+    text.textContent = item.option;
+    text.title = `${item.question}: ${item.option}`;
+    row.appendChild(text);
 
-      const text = el('span', 'pesto-row-text');
-      text.textContent = item.option;
-      text.title = `${item.question}: ${item.option}`;
-      row.appendChild(text);
+    const actions = el('div', 'pesto-row-actions');
+    actions.appendChild(createCopyButton(item.option));
 
-      const actions = el('div', 'pesto-row-actions');
-
-      actions.appendChild(createCopyButton(item.option));
-
-      // Unpin button
-      const unpinBtn = el('div', 'pesto-row-action');
-      unpinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2.2 6 6l-3 3 5.5 5.5"/><path d="m18 22-5.5-5.5L16 13l3.8-3.7"/><line x1="2" y1="22" x2="22" y2="2"/></svg>`;
-      unpinBtn.title = 'Unpin';
-      unpinBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await chrome.runtime.sendMessage({
-          type: MSG_UNPIN_RECENT,
-          question: item.question,
-          option: item.option,
-        });
-        init();
+    const unpinBtn = el('div', 'pesto-row-action');
+    unpinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2.2 6 6l-3 3 5.5 5.5"/><path d="m18 22-5.5-5.5L16 13l3.8-3.7"/><line x1="2" y1="22" x2="22" y2="2"/></svg>`;
+    unpinBtn.title = 'Unpin';
+    unpinBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await chrome.runtime.sendMessage({
+        type: MSG_UNPIN_RECENT,
+        question: item.question,
+        option: item.option,
       });
-      actions.appendChild(unpinBtn);
+      init();
+    });
+    actions.appendChild(unpinBtn);
 
-      row.appendChild(actions);
-      section.appendChild(row);
-    }
+    row.appendChild(actions);
+    section.appendChild(row);
   }
 
-  // Recents section
+  return section;
+}
+
+function renderRecents(recents) {
+  const section = el('div', 'pesto-section');
   const recentsLabel = el('div', 'pesto-section-label');
   recentsLabel.textContent = 'Recents';
   section.appendChild(recentsLabel);
@@ -576,10 +708,8 @@ function renderPinnedAndRecents(pinned, recents) {
       row.appendChild(text);
 
       const actions = el('div', 'pesto-row-actions');
-
       actions.appendChild(createCopyButton(recent.option));
 
-      // Pin button
       const pinBtn = el('div', 'pesto-row-action');
       pinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1.5 4.5H10.5z"/><path d="M10.5 6.5 8 13h8l-2.5-6.5"/></svg>`;
       pinBtn.title = 'Pin';
@@ -594,7 +724,6 @@ function renderPinnedAndRecents(pinned, recents) {
       });
       actions.appendChild(pinBtn);
 
-      // Dismiss button (×) — removes from recents only, not from Notion
       const dismissBtn = el('div', 'pesto-row-action');
       dismissBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
       dismissBtn.title = 'Dismiss';

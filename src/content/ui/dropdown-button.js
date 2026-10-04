@@ -15,6 +15,51 @@ const CHEVRON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
 </svg>`;
 
 /**
+ * Scan the input's vicinity for third-party extension icons (password managers,
+ * etc.) that are injected as siblings and appear visually inside the input's
+ * right side. Returns an additional left-offset so Pesto's button sits 16px
+ * to the left of the detected icon rather than on top of it.
+ */
+function detectThirdPartyOffset(inputEl) {
+  const ir = inputEl.getBoundingClientRect();
+  if (ir.width === 0 || ir.height === 0) return 0;
+
+  let maxOffset = 0;
+
+  function check(el) {
+    if (!el || el === inputEl || el.contains(inputEl)) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+
+    // Must be vertically within the input (with 2px tolerance)
+    const withinV = r.top >= ir.top - 2 && r.bottom <= ir.bottom + 2;
+    // Must occupy only the right portion of the input (rules out full-width wrappers)
+    // and its right edge must not extend beyond the input's right edge
+    const withinH = r.left > ir.left + ir.width * 0.5 && r.right <= ir.right + 4;
+
+    if (withinV && withinH) {
+      // Position Pesto 16px to the left of this element.
+      // offset = (ir.right - r.left) + 12
+      //   where 12 = desired 16px gap − the 4px already subtracted in positionButton
+      const offset = (ir.right - r.left) + 12;
+      maxOffset = Math.max(maxOffset, offset);
+    }
+  }
+
+  // Most extensions inject a sibling right after the input
+  const parent = inputEl.parentElement;
+  if (parent) {
+    for (const child of parent.children) check(child);
+  }
+  // Some inject one level higher
+  if (parent?.parentElement) {
+    for (const child of parent.parentElement.children) check(child);
+  }
+
+  return maxOffset;
+}
+
+/**
  * Create the dropdown button element.
  * Returns { element, setOpen, updatePosition, destroy }.
  */
@@ -39,6 +84,7 @@ export function createDropdownButton({ onToggle }) {
   let rafId = null;
   let currentInputEl = null;
   let pmOffset = 0;
+  let cachedThirdPartyOffset = 0;
 
   btn.addEventListener('mousedown', (e) => {
     // Use mousedown instead of click to fire before blur
@@ -52,6 +98,7 @@ export function createDropdownButton({ onToggle }) {
   function updatePosition(inputEl, offset = 0) {
     currentInputEl = inputEl;
     pmOffset = offset;
+    cachedThirdPartyOffset = detectThirdPartyOffset(inputEl);
     positionButton();
   }
 
@@ -61,7 +108,7 @@ export function createDropdownButton({ onToggle }) {
     // Top-right corner inside the input, with 4px padding
     const top = rect.top + 4;
     const btnWidth = 40; // logo (20px) + chevron (20px)
-    let left = rect.right - btnWidth - 4 - pmOffset;
+    let left = rect.right - btnWidth - 4 - pmOffset - cachedThirdPartyOffset;
     // Clamp so the button never extends past the input's left edge
     if (left < rect.left + 4) {
       left = rect.left + 4;
