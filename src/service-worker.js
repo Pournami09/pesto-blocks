@@ -87,6 +87,21 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 // ---------------------------------------------------------------------------
+// Popup keepalive
+// ---------------------------------------------------------------------------
+// MV3 service workers terminate after ~30s of inactivity. When the popup was
+// a default_popup, Chrome kept the SW alive automatically. Now that the popup
+// runs in a widget iframe, popup.js explicitly connects a port so the SW
+// stays alive for the duration of the session, preventing in-flight Notion
+// API fetch() calls from being aborted mid-request ("Failed to fetch").
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'pesto-popup') return;
+  // Holding the port reference is sufficient — the SW stays alive while
+  // any port is connected. Nothing else needed here.
+  port.onDisconnect.addListener(() => { /* popup closed; SW may sleep */ });
+});
+
+// ---------------------------------------------------------------------------
 // Widget toggle — inject widget.js into the active tab on icon click
 // ---------------------------------------------------------------------------
 // With no default_popup, clicking the extension icon fires onClicked.
@@ -285,10 +300,11 @@ async function handleMessage(message, sender) {
   switch (type) {
     case MSG_MATCH_FIELD: {
       const { token, dbId } = await requireCredentials();
-      // Always fetch fresh data from Notion so manual edits appear immediately
-      const rows = await queryAllRows(token, dbId);
-      const index = buildIndex(rows);
-      await setCachedData(index);
+      // Use cached index when fresh (populated after first load or after a save).
+      // This avoids a Notion API call on every field focus, which was making
+      // suggestions unreliable when the fetch failed or took too long.
+      // The cache is invalidated after MSG_SAVE_ANSWER so edits appear promptly.
+      const index = await getOrFetch(token, dbId);
       const matches = findMatches(message.label, index);
       return { matches };
     }
